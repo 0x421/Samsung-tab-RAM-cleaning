@@ -11,6 +11,6 @@
         app:showAsAction="never" />
     <item
         android:id="@+id/action_help"
-        android:title="Yardım: Shizuku kurulumu"
+        android:title="Yardım: kurulum"
         app:showAsAction="never" />
 </menu>

@@ -13,7 +13,20 @@ istediğiniz uygulamayı (sistem uygulamaları dahil) kaldırmanızı sağlar.
 - Uzun basarak bir uygulamayı **koruma** altına alma: temizlikte kapatılmaz
 - Ana ekran, klavye, Shizuku ve bu uygulama hiçbir zaman kapatılmaz
 
-## Neden Shizuku?
+## İki temizlik modu
+Uygulama hangisi açıksa onu kullanır (ikisi de açıksa Shizuku).
+
+### Shizuku'suz mod (kolay kurulum)
+Erişilebilirlik servisi her uygulamanın ayar sayfasını açar ve "Zorla durdur"a sizin yerinize basar.
+Hangi uygulamaların açık olduğunu "Kullanım erişimi" izniyle bulur.
+1. Uygulamada **Shizuku'suz modu aç**'a basın ve Kullanım erişimi iznini verin.
+2. Erişilebilirlik → Yüklü uygulamalar → **RAM Temizleyici**'yi açın.
+3. "Kısıtlanmış ayar" uyarısı çıkarsa: Ayarlar → Uygulamalar → RAM Temizleyici → ⋮ →
+   **Kısıtlanmış ayarlara izin ver**, sonra 2. adımı tekrarlayın.
+
+Temizlik sırasında ekran birkaç saniye kararır (uygulama başına ~1 sn). Sistem uygulamalarını kaldırmak için Shizuku gerekir.
+
+### Shizuku modu (en hızlı)
 Android 14'ten itibaren normal uygulamalar başka uygulamaları kapatamıyor.
 Shizuku, uygulamaya ADB (geliştirici) yetkisi verir; böylece `am force-stop`
 ve `pm uninstall` komutları çalışabilir. Shizuku olmadan uygulama yine açılır

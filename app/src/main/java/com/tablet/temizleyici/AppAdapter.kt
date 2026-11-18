@@ -55,7 +55,7 @@ class AppAdapter(
 
         val parts = mutableListOf<String>()
         if (a.running) {
-            parts += if (a.rssKb > 0) "● Çalışıyor · ${a.rssKb / 1024} MB" else "● Çalışıyor"
+            parts += if (a.rssKb > 0) "● Çalışıyor · ${a.rssKb / 1024} MB" else "● Arka planda"
         }
         if (a.isSystem) parts += "Sistem"
         if (a.isProtected) parts += "🛡 Korunuyor"

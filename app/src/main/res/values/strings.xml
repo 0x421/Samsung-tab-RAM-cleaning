@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">RAM Temizleyici</string>
+    <string name="access_desc">Shizuku olmadan RAM temizliği için kullanılır: arka plandaki uygulamaların ayar sayfasını açıp sizin yerinize \"Zorla durdur\" düğmesine basar. Başka hiçbir veri okunmaz veya gönderilmez.</string>
 </resources>

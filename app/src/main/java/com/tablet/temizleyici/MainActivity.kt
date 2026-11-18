@@ -1,14 +1,19 @@
 package com.tablet.temizleyici
 
 import android.app.ActivityManager
+import android.app.AppOpsManager
+import android.app.usage.UsageStatsManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.os.Process
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.Menu
 import android.view.MenuItem
@@ -48,6 +53,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var ramBar: LinearProgressIndicator
     private lateinit var statusText: TextView
     private lateinit var shizukuButton: Button
+    private lateinit var accessButton: Button
     private lateinit var cleanButton: Button
     private lateinit var searchBox: EditText
     private lateinit var runningSwitch: CompoundButton
@@ -112,6 +118,7 @@ class MainActivity : AppCompatActivity() {
         ramBar = findViewById(R.id.ramBar)
         statusText = findViewById(R.id.statusText)
         shizukuButton = findViewById(R.id.shizukuButton)
+        accessButton = findViewById(R.id.accessButton)
         cleanButton = findViewById(R.id.cleanButton)
         searchBox = findViewById(R.id.searchBox)
         runningSwitch = findViewById(R.id.runningSwitch)
@@ -130,6 +137,7 @@ class MainActivity : AppCompatActivity() {
 
         cleanButton.setOnClickListener { cleanAll() }
         shizukuButton.setOnClickListener { onShizukuButton() }
+        accessButton.setOnClickListener { setupAccessMode() }
         swipe.setOnRefreshListener { refresh() }
         searchBox.doAfterTextChanged { applyFilter() }
         runningSwitch.setOnCheckedChangeListener { _, _ -> applyFilter() }
@@ -155,8 +163,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Kaldırma ekranından ya da ayarlardan dönünce listeyi tazele
-        if (allApps.isNotEmpty()) refresh()
+        // İzin ekranlarından, kaldırma ekranından ya da ayarlardan dönünce tazele
+        updateShizukuState()
+        if (allApps.isNotEmpty() && !busy) refresh()
     }
 
     override fun onDestroy() {
@@ -192,28 +201,146 @@ class MainActivity : AppCompatActivity() {
     // ---------- Shizuku durumu ----------
 
     private fun updateShizukuState() {
+        val shizukuReady = shell != null
         when {
-            shell != null -> {
-                statusText.text = "✓ Shizuku bağlı: tam yetki açık"
-                shizukuButton.visibility = View.GONE
-            }
+            shizukuReady -> shizukuButton.visibility = View.GONE
             !Shizuku.pingBinder() -> {
-                statusText.text = "Shizuku çalışmıyor. Arka plan temizliği ve sistem " +
-                    "uygulamalarını kaldırmak için Shizuku'yu başlatın (menü → Yardım)."
                 shizukuButton.text = "Shizuku'yu aç"
                 shizukuButton.visibility = View.VISIBLE
             }
             Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED -> {
-                statusText.text = "Shizuku çalışıyor, bu uygulamaya izin vermeniz gerekiyor."
-                shizukuButton.text = "İzin ver"
+                shizukuButton.text = "Shizuku izni ver"
                 shizukuButton.visibility = View.VISIBLE
             }
             else -> {
-                statusText.text = "Shizuku'ya bağlanılıyor…"
                 shizukuButton.visibility = View.GONE
                 bindShell()
             }
         }
+        val accessReady = accessModeReady()
+        statusText.text = when {
+            shizukuReady -> "✓ Shizuku modu: tam yetki, en hızlı temizlik"
+            accessReady -> "✓ Shizuku'suz mod açık: temizlik çalışır. " +
+                "(Sistem uygulamalarını kaldırmak için Shizuku gerekir.)"
+            else -> "Temizliğin çalışması için bir mod açın:\n" +
+                "• Shizuku'suz mod: kurulumu kolay, 2 izin yeterli\n" +
+                "• Shizuku: en hızlısı, sistem uygulamalarını da kaldırır"
+        }
+        accessButton.visibility = if (shizukuReady || accessReady) View.GONE else View.VISIBLE
+        // Shizuku hiç kurulu değilse ve Shizuku'suz mod hazırsa Shizuku düğmesini gösterme
+        if (accessReady && packageManager.getLaunchIntentForPackage(SHIZUKU_PKG) == null) {
+            shizukuButton.visibility = View.GONE
+        }
+    }
+
+    // ---------- Shizuku'suz mod (Erişilebilirlik + Kullanım erişimi) ----------
+
+    private fun hasUsageAccess(): Boolean {
+        val ops = getSystemService(AppOpsManager::class.java) ?: return false
+        val mode = if (Build.VERSION.SDK_INT >= 29) {
+            ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), packageName)
+        } else {
+            ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), packageName)
+        }
+        return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    private fun accessModeReady() = hasUsageAccess() && ForceStopService.isEnabled(this)
+
+    private fun openSafe(intent: Intent) {
+        try {
+            startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_SETTINGS))
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun setupAccessMode() {
+        if (!hasUsageAccess()) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Adım 1/2 · Kullanım erişimi")
+                .setMessage(
+                    "Arka planda hangi uygulamaların açık olduğunu görebilmek için bu izin gerekiyor.\n\n" +
+                        "Açılan listede \"RAM Temizleyici\"yi bulun, izni açın ve geri dönün."
+                )
+                .setPositiveButton("Ayarları aç") { _, _ ->
+                    openSafe(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                }
+                .setNegativeButton("Vazgeç", null)
+                .show()
+            return
+        }
+        if (!ForceStopService.isEnabled(this)) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Adım 2/2 · Erişilebilirlik")
+                .setMessage(
+                    "Uygulamaları sizin yerinize \"Zorla durdur\" ile kapatabilmek için:\n\n" +
+                        "1. Açılan ekranda \"Yüklü uygulamalar\" → \"RAM Temizleyici\" → açın.\n\n" +
+                        "2. \"Kısıtlanmış ayar\" uyarısı çıkarsa: \"Uygulama bilgisi\" düğmesine basın → " +
+                        "sağ üstteki ⋮ → \"Kısıtlanmış ayarlara izin ver\" → sonra 1. adımı tekrarlayın.\n\n" +
+                        "Bu izin yalnızca ayar ekranındaki \"Zorla durdur\" düğmesine basmak için kullanılır."
+                )
+                .setPositiveButton("Ayarları aç") { _, _ ->
+                    openSafe(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }
+                .setNeutralButton("Uygulama bilgisi") { _, _ ->
+                    openSafe(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                }
+                .setNegativeButton("Vazgeç", null)
+                .show()
+            return
+        }
+        toast("Shizuku'suz mod hazır")
+        updateShizukuState()
+    }
+
+    private fun showModeChooser() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Temizlik modu seçin")
+            .setItems(
+                arrayOf(
+                    "Shizuku'suz mod (kolay kurulum)",
+                    "Shizuku modu (en hızlı, bilgisayarsız ama her açılışta başlatılır)"
+                )
+            ) { _, i -> if (i == 0) setupAccessMode() else onShizukuButton() }
+            .setNegativeButton("Vazgeç", null)
+            .show()
+    }
+
+    private val cleanedPrefs by lazy { getSharedPreferences("temizlik_zamani", MODE_PRIVATE) }
+
+    /** Kullanım istatistiklerine göre arka planda açık olması muhtemel uygulamalar. */
+    private fun usageRunning(): Set<String> {
+        if (!hasUsageAccess()) return emptySet()
+        val usm = getSystemService(UsageStatsManager::class.java) ?: return emptySet()
+        val now = System.currentTimeMillis()
+        val boot = now - SystemClock.elapsedRealtime()
+        val stats = try {
+            usm.queryUsageStats(UsageStatsManager.INTERVAL_BEST, boot, now)
+        } catch (_: Exception) {
+            null
+        } ?: return emptySet()
+        val result = HashSet<String>()
+        for (st in stats) {
+            var last = st.lastTimeUsed
+            if (Build.VERSION.SDK_INT >= 29) {
+                last = maxOf(last, st.lastTimeVisible, st.lastTimeForegroundServiceUsed)
+            }
+            if (last > boot && last > cleanedPrefs.getLong(st.packageName, 0L)) {
+                result += st.packageName
+            }
+        }
+        return result
+    }
+
+    private fun markCleaned(pkgs: List<String>) {
+        val now = System.currentTimeMillis()
+        val e = cleanedPrefs.edit()
+        pkgs.forEach { e.putLong(it, now) }
+        e.apply()
     }
 
     private fun bindShell() {
@@ -327,9 +454,10 @@ class MainActivity : AppCompatActivity() {
                     }
             }
             val usage = runningUsage()
+            val recent = if (shell == null) withContext(Dispatchers.Default) { usageRunning() } else emptySet()
             val prot = protectedSet() + autoProtected()
             apps.forEach {
-                it.running = usage.containsKey(it.pkg)
+                it.running = usage.containsKey(it.pkg) || it.pkg in recent
                 it.rssKb = usage[it.pkg] ?: 0L
                 it.isProtected = it.pkg in prot
             }
@@ -363,12 +491,50 @@ class MainActivity : AppCompatActivity() {
     // ---------- İşlemler ----------
 
     private fun cleanAll() {
-        if (shell == null) {
-            toast("Önce Shizuku'yu bağlayın")
-            onShizukuButton()
+        if (busy) return
+        when {
+            shell != null -> cleanWithShizuku()
+            accessModeReady() -> cleanWithAccessibility()
+            else -> {
+                toast("Temizlik için önce bir mod açın")
+                showModeChooser()
+            }
+        }
+    }
+
+    private fun cleanWithAccessibility() {
+        val service = ForceStopService.instance
+        if (service == null) {
+            toast("Erişilebilirlik servisi yanıt vermiyor. Ayarlardan kapatıp yeniden açın.")
+            openSafe(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             return
         }
-        if (busy) return
+        val recent = usageRunning()
+        val skip = protectedSet() + autoProtected()
+        val targets = allApps.filter { !it.isSystem && it.pkg in recent && it.pkg !in skip }
+        if (targets.isEmpty()) {
+            toast("Arka planda kapatılacak uygulama yok ✓")
+            return
+        }
+        busy = true
+        cleanButton.isEnabled = false
+        cleanButton.text = "Temizleniyor…"
+        val before = memInfo().availMem
+        service.forceStopAll(targets.map { it.pkg to it.label }) { stopped, cleaned ->
+            markCleaned(cleaned)
+            lifecycleScope.launch {
+                delay(1200)
+                val freedMb = ((memInfo().availMem - before) / 1048576).coerceAtLeast(0)
+                toast("$stopped uygulama kapatıldı · yaklaşık $freedMb MB boşaldı")
+                cleanButton.text = "Arka planı temizle"
+                cleanButton.isEnabled = true
+                busy = false
+                refresh()
+            }
+        }
+    }
+
+    private fun cleanWithShizuku() {
         busy = true
         cleanButton.isEnabled = false
         cleanButton.text = "Temizleniyor…"
@@ -392,6 +558,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopApp(app: AppItem) {
+        val service = ForceStopService.instance
+        if (shell == null && service != null && ForceStopService.isEnabled(this) && !busy) {
+            busy = true
+            service.forceStopAll(listOf(app.pkg to app.label)) { stopped, cleaned ->
+                markCleaned(cleaned)
+                busy = false
+                toast(if (stopped > 0) "${app.label} durduruldu" else "${app.label} zaten durmuş")
+                refresh()
+            }
+            return
+        }
         if (shell == null || !app.pkg.matches(PKG_REGEX)) {
             // Shizuku yoksa: uygulama bilgisi ekranını aç, oradan "Zorla durdur"
             startActivity(
@@ -504,16 +681,24 @@ class MainActivity : AppCompatActivity() {
 
     private fun showHelp() {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Shizuku nasıl kurulur?")
+            .setTitle("Kurulum")
             .setMessage(
-                "1. Play Store'dan \"Shizuku\" uygulamasını yükleyin.\n\n" +
-                    "2. Ayarlar → Tablet hakkında → Yazılım bilgileri → \"Yapım numarası\"na 7 kez dokunun " +
-                    "(Geliştirici seçenekleri açılır).\n\n" +
-                    "3. Ayarlar → Geliştirici seçenekleri → \"Kablosuz hata ayıklama\"yı açın. Tablet Wi-Fi'a bağlı olmalı.\n\n" +
-                    "4. Shizuku'yu açın → \"Kablosuz hata ayıklama ile başlat\" → \"Eşleştirme\" adımlarını izleyin " +
-                    "(eşleştirme kodu bildirimden girilir; yalnızca ilk seferde).\n\n" +
-                    "5. Shizuku'da \"Başlat\"a basın, sonra bu uygulamaya dönüp \"İzin ver\"e dokunun.\n\n" +
-                    "Not: Tablet yeniden başlatılınca Shizuku'da tekrar \"Başlat\"a basmanız gerekir."
+                "İKİ MOD VAR, birini açmanız yeterli.\n\n" +
+                    "▶ SHIZUKU'SUZ MOD (kolay)\n" +
+                    "1. \"Shizuku'suz modu aç\" düğmesine basın.\n" +
+                    "2. Kullanım erişimi iznini verin.\n" +
+                    "3. Erişilebilirlik → Yüklü uygulamalar → RAM Temizleyici'yi açın. " +
+                    "\"Kısıtlanmış ayar\" uyarısı çıkarsa: Ayarlar → Uygulamalar → RAM Temizleyici → ⋮ → " +
+                    "\"Kısıtlanmış ayarlara izin ver\".\n" +
+                    "Temizlik sırasında ekran birkaç saniye kararır; bu normaldir.\n\n" +
+                    "▶ SHIZUKU MODU (en hızlı)\n" +
+                    "1. Play Store'dan \"Shizuku\"yu yükleyin.\n" +
+                    "2. Ayarlar → Tablet/Telefon hakkında → Yazılım bilgileri → \"Yapım numarası\"na 7 kez dokunun.\n" +
+                    "3. Geliştirici seçenekleri → \"Kablosuz hata ayıklama\"yı açın.\n" +
+                    "4. Shizuku → \"Kablosuz hata ayıklama ile başlat\" → eşleştirme adımları.\n" +
+                    "5. Shizuku'da \"Başlat\", sonra burada \"Shizuku izni ver\".\n" +
+                    "Xiaomi: \"USB hata ayıklama (Güvenlik ayarları)\"nı da açın.\n" +
+                    "Cihaz yeniden başlayınca Shizuku'da tekrar \"Başlat\"a basın."
             )
             .setPositiveButton("Tamam", null)
             .show()
