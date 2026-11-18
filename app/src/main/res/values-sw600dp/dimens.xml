@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tablet -->
+    <dimen name="screen_padding">24dp</dimen>
+    <dimen name="clean_button_height">64dp</dimen>
+</resources>

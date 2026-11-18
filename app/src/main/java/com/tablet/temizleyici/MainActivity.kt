@@ -14,6 +14,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.Button
+import android.widget.CompoundButton
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
@@ -26,7 +27,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -50,8 +50,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var shizukuButton: Button
     private lateinit var cleanButton: Button
     private lateinit var searchBox: EditText
-    private lateinit var runningSwitch: MaterialSwitch
-    private lateinit var systemSwitch: MaterialSwitch
+    private lateinit var runningSwitch: CompoundButton
+    private lateinit var systemSwitch: CompoundButton
     private lateinit var countText: TextView
     private lateinit var swipe: SwipeRefreshLayout
     private lateinit var adapter: AppAdapter
@@ -354,7 +354,7 @@ class MainActivity : AppCompatActivity() {
         adapter.submit(list)
         val runningCount = list.count { it.running }
         countText.text = if (shell != null) {
-            "${list.size} uygulama · $runningCount tanesi çalışıyor · Korumak için uzun basın"
+            "${list.size} uygulama · $runningCount çalışıyor · Korumak için uzun basın"
         } else {
             "${list.size} uygulama · Korumak için uzun basın"
         }

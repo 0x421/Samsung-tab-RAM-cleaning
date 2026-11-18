@@ -1,4 +1,4 @@
-# RAM Temizleyici (Galaxy Tab S7 FE için)
+# RAM Temizleyici (Android tablet ve telefonlar için)
 
 Arka planda çalışan uygulamaları gerçekten kapatır, RAM kullanımını gösterir ve
 istediğiniz uygulamayı (sistem uygulamaları dahil) kaldırmanızı sağlar.
@@ -27,6 +27,11 @@ ama "Durdur" ayarlar ekranını açar, "Kaldır" ise normal kaldırma penceresin
 5. Shizuku'da **Başlat** → RAM Temizleyici'ye dönüp **İzin ver**.
 
 Tablet yeniden başlatılınca Shizuku'da yalnızca tekrar **Başlat**'a basmanız yeterli.
+
+### Xiaomi (MIUI / HyperOS) için ek ayarlar
+- Geliştirici seçenekleri → **USB hata ayıklama (Güvenlik ayarları)**'nı da açın.
+- Shizuku için Pil tasarrufu → **Kısıtlama yok** ve otomatik başlatmayı açın.
+- `com.miui.securitycenter` gibi temel Xiaomi bileşenlerini kaldırmayın.
 
 ## APK nasıl alınır?
 
